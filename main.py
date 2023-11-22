@@ -28,7 +28,19 @@ app.layout = html.Div([
         id='interval-component',
         interval=1 * 1000,  # em milissegundos
         n_intervals=0
-    )
+    ),
+    #  dcc.Dropdown(
+    #     id='graph-type-dropdown',
+    #     options=[
+    #         {'label': 'Scatter', 'value': 'scatter'},
+    #         {'label': 'histogram', 'value': 'histogram'},
+    #         {'label': 'Bar', 'value': 'bar'},
+    #         # Adicione outros tipos de gráficos conforme necessário
+    #     ],
+    #     value='scatter',  # Valor padrão ao iniciar
+    #     style={'width': '50%', 'textAlign': 'center', 'color': '#7FDBFF', 'left': '50%'},
+    # ),
+     dcc.Graph(id='dht-graph'),
 ])
 
 # Função chamada quando o cliente se conecta ao broker MQTT
@@ -45,6 +57,7 @@ def on_message(client, userdata, msg):
     data_buffer.append(value)
     update_graph(0)
     update_fft_graph(0)
+    update_dht_graph(0)
 
 # Função para calcular a FFT
 def calculate_fft(data):
@@ -55,7 +68,15 @@ def calculate_fft(data):
     else:
         # Retornar algum valor padrão ou tratar de outra forma quando não há dados suficientes
         return [], []
+def calculate_dht(data):
+        N = len(data)
+        dht_values = np.zeros(N)
+        for k in range(N):
+            cos_sum = np.sum(data * np.cos(2 * np.pi / N * k * np.arange(N)))
+            sin_sum = np.sum(data * np.sin(2 * np.pi / N * k * np.arange(N)))
+            dht_values[k] = cos_sum + sin_sum
 
+        return dht_values
 
 # Conecta-se ao broker MQTT
 client = mqtt.Client()
@@ -89,14 +110,27 @@ def update_graph(n_intervals):
 def update_fft_graph(n_intervals):
     if  buffer_size:
         fft_freq, fft_values = calculate_fft(data_buffer)
-        trace_fft = go.Scatter(x=fft_freq, y=np.abs(fft_values))
-        fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter"}]])
+        trace_fft = go.Bar(x=fft_freq, y=np.abs(fft_values))
+        fig = make_subplots(rows=1, cols=1, specs=[[{"type": "bar"}]])
         fig.add_trace(trace_fft)
         fig.update_layout(title="Cálculo da FFT", xaxis_title="Frequência", yaxis_title="Amplitude")
         return fig
     else:
         # Se não houver dados suficientes, retorna um gráfico vazio
         return go.Figure()
+
+def update_dht_graph(n_intervals):
+        if buffer_size:
+            dht_values = calculate_dht(data_buffer)
+            trace_dht = go.Scatter(x=np.arange(len(dht_values)), y=dht_values)
+            fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter"}]])
+            fig.add_trace(trace_dht)
+            fig.update_layout(title="Cálculo da DHT", xaxis_title="Amostras", yaxis_title="Amplitude")
+            return fig
+        else:
+            # Se não houver dados suficientes, retorna um gráfico vazio
+            return go.Figure()
+
 
 # Mantém o aplicativo Dash em execução
 if __name__ == '__main__':
